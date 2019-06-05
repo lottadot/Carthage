@@ -444,6 +444,42 @@ extension Reactive where Base: URLSession {
 		}
 	}
 
+	/// Returns a SignalProducer which obtains the last modified date associated with an
+	/// `NSURLResponse`
+	///
+	/// - parameters:
+	///   - request: A request that will be performed when the producer is
+	///              started
+	///
+	/// - returns: A producer that will execute the given request once for each
+	///            invocation of `start()`.
+	///
+	/// - note: This method will not send an error event in the case of a server
+	///         side error (i.e. when a response with status code other than
+	///         200...299 is received).
+	internal func lastModified(with url: URL) -> SignalProducer<(URL, Date?), AnyError> {
+
+		var request = URLRequest(url: url)
+		request.httpMethod = "HEAD"
+
+		return SignalProducer { [base = self.base] observer, lifetime in
+			let task = base.downloadTask(with: request) { url, response, error in
+				if let url = url, let response = response {
+					observer.send(value: (url, response.lastModified))
+					observer.sendCompleted()
+				} else {
+					observer.send(error: AnyError(error ?? defaultSessionError))
+				}
+			}
+
+			lifetime.observeEnded {
+				task.cancel()
+			}
+			task.resume()
+		}
+	}
+}
+
 extension URLResponse {
 	var lastModifiedHeader: String? {
 		get {

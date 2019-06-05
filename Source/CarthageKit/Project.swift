@@ -994,16 +994,20 @@ public final class Project { // swiftlint:disable:this type_body_length
 		let fileName = url.lastPathComponent
 		let fileURL = fileURLToCachedBinaryDependency(dependency, version, fileName)
 
-		if FileManager.default.fileExists(atPath: fileURL.path) {
-			return SignalProducer(value: fileURL)
-		} else {
-			return URLSession.shared.reactive.download(with: URLRequest(url: url))
-				.on(started: {
-					self._projectEventsObserver.send(value: .downloadingBinaries(dependency, version.description))
-				})
-				.mapError { CarthageError.readFailed(url, $0 as NSError) }
-				.flatMap(.concat) { downloadURL, _ in cacheDownloadedBinary(downloadURL, toURL: fileURL) }
+		var request = URLRequest(url: url)
+		if FileManager.default.fileExists(atPath: fileURL.path), let fileAttributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path), let fileLastModified = fileAttributes[FileAttributeKey.modificationDate] as? Date {
+			let dateFormatter = DateFormatter()
+			dateFormatter.dateFormat = "EEEE, dd LLL yyyy HH:mm:ss zzz"
+			// http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
+			request.setValue(dateFormatter.string(from: fileLastModified), forHTTPHeaderField: "If-Modified-Since")
 		}
+
+		return URLSession.shared.reactive.download(with: request)
+			.on(started: {
+				self._projectEventsObserver.send(value: .downloadingBinaries(dependency, version.description))
+			})
+			.mapError { CarthageError.readFailed(url, $0 as NSError) }
+			.flatMap(.concat) { downloadURL, _ in cacheDownloadedBinary(downloadURL, toURL: fileURL) }
 	}
 
 	/// Creates symlink between the dependency checkouts and the root checkouts

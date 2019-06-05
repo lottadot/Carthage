@@ -443,4 +443,26 @@ extension Reactive where Base: URLSession {
 			task.resume()
 		}
 	}
+
+extension URLResponse {
+	var lastModifiedHeader: String? {
+		get {
+			if let httpResp = self as? HTTPURLResponse, let lastMod = httpResp.allHeaderFields["Last-Modified"] as? String {
+				return lastMod
+			}
+			return nil
+		}
+	}
+	var lastModified: Date? {
+		get {
+			if let lastModifiedHeader = self.lastModifiedHeader {
+				let gmtDateFormatter = DateFormatter()
+				gmtDateFormatter.dateFormat = "EEEE, dd LLL yyyy HH:mm:ss zzz"
+				if let serverDate = gmtDateFormatter.date(from: lastModifiedHeader) {
+					return serverDate
+				}
+			}
+			return nil
+		}
+	}
 }
